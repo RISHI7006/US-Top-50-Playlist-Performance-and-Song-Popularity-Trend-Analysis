@@ -28,6 +28,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from model_loader import load_models
 
 # ---------------------------------------------------------------------------
 # Page config & theme
@@ -36,39 +37,275 @@ st.set_page_config(
     page_title="Atlantic Playlist Explorer",
     page_icon="🎵",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
-# Inject a modern dark-accented theme
+# Inject a modern website-style responsive theme
 st.markdown(
     """
     <style>
     :root {
-        --bg: #0f1117;
-        --card: #181a22;
+        --bg: #07110c;
+        --bg2: #0b1710;
+        --card: rgba(18, 31, 23, .88);
+        --card2: rgba(25, 42, 31, .72);
         --accent: #1DB954;
-        --accent2: #1ed760;
-        --text: #e8eaf0;
-        --muted: #9ca3b4;
+        --accent2: #66f28b;
+        --text: #f4fff7;
+        --muted: #a9b9ae;
+        --border: rgba(255,255,255,.08);
     }
-    .stApp { background: var(--bg); }
-    .stSidebar .stSlider > div > div { background: var(--accent); }
-    h1, h2, h3 { letter-spacing: -.02em; }
-    .metric-card {
-        background: var(--card);
-        border: 1px solid rgba(255,255,255,.06);
-        border-radius: 14px;
-        padding: 1.2rem 1.4rem;
-        text-align: center;
+
+    .stApp {
+        background:
+            radial-gradient(circle at 10% 0%, rgba(29,185,84,.16), transparent 28%),
+            radial-gradient(circle at 90% 10%, rgba(102,242,139,.08), transparent 24%),
+            linear-gradient(145deg, var(--bg), var(--bg2));
+        color: var(--text);
     }
+
+    #MainMenu, footer { visibility: hidden; }
+    header[data-testid="stHeader"] { background: transparent; }
+
+    .block-container {
+        max-width: 1400px;
+        padding-top: 1.2rem;
+        padding-bottom: 3rem;
+    }
+
+    /* Top navigation / brand */
+    .brand {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:20px;
+        padding: 14px 4px 22px;
+    }
+
+    .brand-left {
+        display:flex;
+        align-items:center;
+        gap:12px;
+    }
+
+    .brand-logo {
+        width:44px;
+        height:44px;
+        border-radius:14px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        background:linear-gradient(135deg,#1DB954,#66f28b);
+        color:#06100a;
+        font-size:24px;
+        font-weight:900;
+        box-shadow:0 10px 30px rgba(29,185,84,.25);
+    }
+
+    .brand-name {
+        font-size:1.08rem;
+        font-weight:800;
+        letter-spacing:.01em;
+    }
+
+    .brand-sub {
+        color:var(--muted);
+        font-size:.78rem;
+        margin-top:2px;
+    }
+
+    .status-pill {
+        padding:8px 13px;
+        border:1px solid rgba(102,242,139,.22);
+        background:rgba(29,185,84,.08);
+        border-radius:999px;
+        color:#b8ffc9;
+        font-size:.78rem;
+        font-weight:700;
+    }
+
+    /* Hero */
+    .hero {
+        position:relative;
+        overflow:hidden;
+        padding:62px 52px;
+        border:1px solid var(--border);
+        border-radius:28px;
+        background:
+            linear-gradient(135deg, rgba(29,185,84,.17), rgba(12,24,16,.92) 58%),
+            linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+        box-shadow:0 24px 80px rgba(0,0,0,.28);
+        margin-bottom:24px;
+    }
+
+    .hero:after {
+        content:"";
+        position:absolute;
+        width:300px;
+        height:300px;
+        right:-90px;
+        top:-110px;
+        border-radius:50%;
+        background:rgba(29,185,84,.13);
+        filter:blur(3px);
+    }
+
+    .eyebrow {
+        color:#7df59b;
+        font-size:.76rem;
+        font-weight:800;
+        letter-spacing:.16em;
+        text-transform:uppercase;
+        margin-bottom:12px;
+    }
+
+    .hero h1 {
+        font-size:clamp(2.3rem, 5vw, 4.8rem);
+        line-height:.98;
+        margin:0 0 18px;
+        font-weight:900;
+        letter-spacing:-.055em;
+        max-width:820px;
+    }
+
+    .hero p {
+        color:#b9c9be;
+        font-size:1.08rem;
+        line-height:1.7;
+        max-width:720px;
+        margin:0;
+    }
+
+    /* Cards */
+    .metric-card, .feature-card {
+        background:linear-gradient(180deg,var(--card),rgba(10,20,14,.82));
+        border:1px solid var(--border);
+        border-radius:18px;
+        padding:1.25rem 1.35rem;
+        box-shadow:0 12px 35px rgba(0,0,0,.16);
+    }
+
+    .metric-card { min-height:112px; }
+
     .metric-card .value {
-        font-size: 2rem; font-weight: 700; color: var(--accent2);
+        font-size:2rem;
+        font-weight:850;
+        color:var(--accent2);
+        letter-spacing:-.03em;
     }
+
     .metric-card .label {
-        font-size: .8rem; color: var(--muted); margin-top: .3rem;
+        font-size:.76rem;
+        color:var(--muted);
+        margin-top:.35rem;
+        text-transform:uppercase;
+        letter-spacing:.08em;
     }
-    .tab-desc { color: var(--muted); font-size: .9rem; margin-bottom: 1rem; }
+
+    .section-title {
+        font-size:1.35rem;
+        font-weight:800;
+        margin:28px 0 8px;
+    }
+
+    .section-desc, .tab-desc {
+        color:var(--muted);
+        font-size:.9rem;
+        line-height:1.55;
+        margin-bottom:1rem;
+    }
+
+    .feature-icon {
+        font-size:1.55rem;
+        margin-bottom:8px;
+    }
+
+    .feature-title {
+        font-weight:800;
+        font-size:1rem;
+        margin-bottom:5px;
+    }
+
+    .feature-text {
+        color:var(--muted);
+        font-size:.82rem;
+        line-height:1.5;
+    }
+
+    /* Streamlit widgets */
+    div[data-baseweb="tab-list"] {
+        gap:6px;
+        background:rgba(255,255,255,.025);
+        padding:6px;
+        border:1px solid var(--border);
+        border-radius:14px;
+    }
+
+    button[data-baseweb="tab"] {
+        border-radius:10px !important;
+    }
+
+    div.stButton > button, div.stDownloadButton > button {
+        border-radius:12px;
+        border:1px solid rgba(102,242,139,.25);
+        background:linear-gradient(135deg,#1DB954,#159447);
+        color:#041008;
+        font-weight:800;
+        min-height:44px;
+        box-shadow:0 10px 24px rgba(29,185,84,.14);
+    }
+
+    div.stButton > button:hover, div.stDownloadButton > button:hover {
+        border-color:#66f28b;
+        transform:translateY(-1px);
+    }
+
+    [data-testid="stMetric"] {
+        background:rgba(255,255,255,.025);
+        border:1px solid var(--border);
+        border-radius:14px;
+        padding:12px;
+    }
+
+    .stDataFrame {
+        border:1px solid var(--border);
+        border-radius:14px;
+        overflow:hidden;
+    }
+
+    @media (max-width: 800px) {
+        .hero { padding:38px 26px; border-radius:22px; }
+        .hero h1 { font-size:2.5rem; }
+        .block-container { padding-left:1rem; padding-right:1rem; }
+        .status-pill { display:none; }
+    }
     </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# Website-style brand header
+st.markdown(
+    """
+    <div class="brand">
+        <div class="brand-left">
+            <div class="brand-logo">♫</div>
+            <div>
+                <div class="brand-name">Atlantic Playlist</div>
+                <div class="brand-sub">Performance Intelligence Platform</div>
+            </div>
+        </div>
+        <div class="status-pill">● AI ANALYTICS ONLINE</div>
+    </div>
+
+    <div class="hero">
+        <div class="eyebrow">US TOP-50 · MUSIC INTELLIGENCE</div>
+        <h1>Understand what makes a song rise.</h1>
+        <p>
+            Explore playlist movement, artist dominance and popularity trends —
+            then compare machine-learning and deep-learning models behind the data.
+        </p>
+    </div>
     """,
     unsafe_allow_html=True,
 )
@@ -289,13 +526,16 @@ if st.sidebar.button("Generate PDF Report", use_container_width=True):
 
 
 # ---------------------------------------------------------------------------
-# Header
+# Dashboard summary
 # ---------------------------------------------------------------------------
-st.title("🎵 Atlantic Playlist Performance Explorer")
 st.markdown(
-    f"<p class='tab-desc'>US Top-50 daily snapshots · "
-    f"{len(fdf):,} filtered rows · {fdf['date'].nunique()} days · "
-    f"{fdf['song'].nunique()} unique songs · {fdf['artist'].nunique()} artists</p>",
+    f"""
+    <div class="section-title">Playlist intelligence</div>
+    <div class="section-desc">
+        {len(fdf):,} filtered song-days · {fdf['date'].nunique()} days ·
+        {fdf['song'].nunique()} songs · {fdf['artist'].nunique()} artists
+    </div>
+    """,
     unsafe_allow_html=True,
 )
 
